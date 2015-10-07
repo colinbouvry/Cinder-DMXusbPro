@@ -9,7 +9,7 @@
  *
  */
 
-#include "cinder/app/AppBasic.h"
+#include "cinder/app/App.h"
 #include "cinder/Utilities.h"
 #include <iostream>
 #include "DMXPro.h"
@@ -42,7 +42,7 @@ DMXPro::~DMXPro()
     if ( mSerial )
     {
         mSerial->flush();
-        delete mSerial;
+        mSerial.reset();
         mSerial = NULL;
     }
     
@@ -61,7 +61,7 @@ void DMXPro::shutdown(bool send_zeros)
 		
 		ci::sleep( mThreadSleepFor*2 );
 		mSerial->flush();	
-		delete mSerial;
+		mSerial.reset();
 		mSerial = NULL;
 		ci::sleep(50);	
 	}
@@ -89,7 +89,7 @@ void DMXPro::initSerial(bool initWithZeros)
 			ci::sleep(100);	
 		}
 		mSerial->flush();	
-		delete mSerial;
+		mSerial.reset();
 		mSerial = NULL;
 		ci::sleep(50);	
 	}
@@ -97,7 +97,7 @@ void DMXPro::initSerial(bool initWithZeros)
 	try 
     {
         Serial::Device dev = Serial::findDeviceByNameContains(mSerialDeviceName);
-		mSerial = new Serial( dev, DMXPRO_BAUD_RATE );
+		mSerial = Serial::create( dev, DMXPRO_BAUD_RATE );
         console() << "DMXPro > Connected to usb DMX interface: " << dev.getName() << endl;
 	}
 	catch( ... ) 
@@ -106,7 +106,7 @@ void DMXPro::initSerial(bool initWithZeros)
 		mSerial = NULL;
 	}
     
-    mSendDataThread = std::thread( &DMXPro::sendDMXData, this );
+    mSendDataThread = std::thread( bind( &DMXPro::sendDMXData, this));
 }
 
 
@@ -140,6 +140,7 @@ void DMXPro::sendDMXData()
 		mSerial->writeBytes( mDMXPacket, DMXPRO_PACKET_SIZE );                          // send data
 		dataLock.unlock();                                                              // unlock data
         std::this_thread::sleep_for( std::chrono::milliseconds( mThreadSleepFor ) );
+		//console() << "send" << endl;
 	}
     
     console() << "DMXPro > sendDMXData() thread exited!" << endl;
@@ -148,6 +149,7 @@ void DMXPro::sendDMXData()
 
 void DMXPro::setValue(int value, int channel) 
 {    
+	channel -= 1;
 	if ( channel < 0 || channel > DMXPRO_PACKET_SIZE-2 )
 	{
         console() << "DMXPro > invalid DMX channel: " << channel << endl;
